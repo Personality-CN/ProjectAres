@@ -1,5 +1,6 @@
 package tc.oc.api.minecraft.users;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -11,7 +12,6 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import tc.oc.api.docs.Punishment;
 import tc.oc.api.docs.Session;
-import tc.oc.api.docs.User;
 import tc.oc.api.docs.UserId;
 import tc.oc.api.docs.Whisper;
 import tc.oc.api.docs.virtual.UserDoc;
@@ -31,24 +31,31 @@ import tc.oc.api.users.UserService;
 import tc.oc.api.users.UserUpdateResponse;
 import tc.oc.api.util.UUIDs;
 import tc.oc.commons.core.concurrent.FutureUtils;
-import tc.oc.minecraft.api.entity.OfflinePlayer;
 import tc.oc.minecraft.api.server.LocalServer;
+import tc.oc.minecraft.api.user.User;
+import tc.oc.minecraft.api.user.UserFactory;
+import tc.oc.minecraft.api.user.UserFinder;
 
 @Singleton
-public class LocalUserService extends NullModelService<User, UserDoc.Partial> implements UserService {
+public class LocalUserService extends NullModelService<tc.oc.api.docs.User, UserDoc.Partial> implements UserService {
 
     @Inject private LocalServer minecraftServer;
     @Inject private LocalSessionFactory sessionFactory;
+    @Inject private UserFinder userFinder;
+    @Inject private UserFactory userFactory;
 
     @Override
-    public ListenableFuture<User> find(UserId userId) {
-        return Futures.immediateFuture(new LocalUserDocument(minecraftServer.getOfflinePlayer(UUIDs.parse(userId.player_id()))));
+    public ListenableFuture<tc.oc.api.docs.User> find(UserId userId) {
+        return FutureUtils.mapSync(
+            userFinder.findUserAsync(UUIDs.parse(userId.player_id())),
+            LocalUserDocument::new
+        );
     }
 
     @Override
     public ListenableFuture<UserSearchResponse> search(UserSearchRequest request) {
-        for(OfflinePlayer player : minecraftServer.getSavedPlayers()) {
-            if(player.getLastKnownName()
+        for(User player : minecraftServer.getSavedPlayers()) {
+            if(player.lastKnownName()
                      .filter(name -> name.equalsIgnoreCase(request.username))
                      .isPresent()) {
                 return Futures.immediateFuture(new UserSearchResponse(new LocalUserDocument(player),
@@ -63,7 +70,7 @@ public class LocalUserService extends NullModelService<User, UserDoc.Partial> im
 
     @Override
     public ListenableFuture<LoginResponse> login(LoginRequest request) {
-        final User user = new LocalUserDocument(minecraftServer.getOfflinePlayer(request.uuid));
+        final tc.oc.api.docs.User user = new LocalUserDocument(userFactory.createUser(request.uuid, request.username, Instant.now()));
         final Session session = request.start_session ? sessionFactory.newSession(user, request.ip)
                                                       : null;
 
@@ -84,7 +91,7 @@ public class LocalUserService extends NullModelService<User, UserDoc.Partial> im
             }
 
             @Override
-            public User user() {
+            public tc.oc.api.docs.User user() {
                 return user;
             }
 
@@ -124,29 +131,29 @@ public class LocalUserService extends NullModelService<User, UserDoc.Partial> im
             }
 
             @Override
-            public User user() {
+            public tc.oc.api.docs.User user() {
                 return user;
             }
         });
     }
 
     @Override
-    public ListenableFuture<User> purchaseGizmo(UserId userId, PurchaseGizmoRequest request) {
+    public ListenableFuture<tc.oc.api.docs.User> purchaseGizmo(UserId userId, PurchaseGizmoRequest request) {
         return find(userId);
     }
 
     @Override
-    public <T extends UserDoc.Partial> ListenableFuture<User> update(UserId userId, T update) {
+    public <T extends UserDoc.Partial> ListenableFuture<tc.oc.api.docs.User> update(UserId userId, T update) {
         return find(userId);
     }
 
     @Override
-    public ListenableFuture<User> changeSetting(UserId userId, ChangeSettingRequest request) {
+    public ListenableFuture<tc.oc.api.docs.User> changeSetting(UserId userId, ChangeSettingRequest request) {
         return find(userId);
     }
 
     @Override
-    public ListenableFuture<User> changeClass(UserId userId, ChangeClassRequest request) {
+    public ListenableFuture<tc.oc.api.docs.User> changeClass(UserId userId, ChangeClassRequest request) {
         return find(userId);
     }
 }
